@@ -575,6 +575,10 @@ async def discover_models(provider: str):
         # Provision DB-stored credentials into env vars before discovery
         await provision_provider_keys(provider)
         discovered = await discover_provider_models(provider)
+        # This build never shows/registers TTS/STT models.
+        discovered = [
+            m for m in discovered if m.model_type not in DISABLED_MODEL_TYPES
+        ]
         return [
             DiscoveredModelResponse(
                 name=m.name,

@@ -54,6 +54,14 @@ COPY open_notebook/__init__.py ./open_notebook/__init__.py
 # Install dependencies (this layer is cached unless dependencies change)
 RUN uv sync --frozen --no-dev
 
+# This build drops YouTube/audio ingestion (podcasts removed, no TTS/STT).
+# pytubefix is a hard dependency of content-core but content-core only imports
+# it lazily inside its YouTube processor, so pruning it does not affect any
+# other content processing. Removing pytubefix also drops the nodejs_wheel
+# package (~200MB of an embedded Node.js 24 runtime) from the final image.
+RUN rm -rf .venv/lib/python3.12/site-packages/pytubefix* \
+           .venv/lib/python3.12/site-packages/nodejs_wheel*
+
 # Pre-download tiktoken encoding so the app works offline (issue #264).
 # /app/tiktoken-cache is intentionally outside /app/data/ so that volume mounts
 # of /app/data (for user data persistence) do not hide the pre-baked encoding.
