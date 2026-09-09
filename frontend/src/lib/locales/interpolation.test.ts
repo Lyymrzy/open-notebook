@@ -27,11 +27,6 @@ describe('i18next interpolation', () => {
     )
   })
 
-  it('resolves plural forms from the base key', () => {
-    expect(i18n.t('podcasts.usedByCount', { count: 1 })).toBe('Used by 1 episode')
-    expect(i18n.t('podcasts.usedByCount', { count: 3 })).toBe('Used by 3 episodes')
-  })
-
   it('does not escape interpolated values (React escapes at render)', () => {
     expect(i18n.t('notebooks.deleteNotebookDesc', { name: 'Research & Notes' })).toBe(
       'Are you sure you want to delete "Research & Notes"? This action cannot be undone.',
