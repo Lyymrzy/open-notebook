@@ -50,12 +50,9 @@ CASES = [
     ("credentials", "api.routers.credentials.Credential.get_all", "GET", "/api/credentials", None),
     ("embedding", "api.routers.embedding.model_manager.get_embedding_model", "POST", "/api/embed", {"item_id": "source:1", "item_type": "source"}),
     ("embedding_rebuild", "api.routers.embedding_rebuild.repo_query", "POST", "/api/embeddings/rebuild", {"mode": "existing"}),
-    ("episode_profiles", "api.routers.episode_profiles.EpisodeProfile.get_all", "GET", "/api/episode-profiles", None),
     ("insights", "api.routers.insights.SourceInsight.get", "GET", "/api/insights/source_insight:1", None),
-    ("podcasts", "api.routers.podcasts.PodcastService.list_episodes", "GET", "/api/podcasts/episodes", None),
     ("search", "api.routers.search.text_search", "POST", "/api/search", {"query": "hello", "type": "text"}),
     ("settings", "api.routers.settings.ContentSettings.get_instance", "GET", "/api/settings", None),
-    ("speaker_profiles", "api.routers.speaker_profiles.SpeakerProfile.get_all", "GET", "/api/speaker-profiles", None),
     ("transformations", "api.routers.transformations.Transformation.get_all", "GET", "/api/transformations", None),
 ]
 

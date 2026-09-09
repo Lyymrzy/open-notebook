@@ -177,14 +177,15 @@ class TestModelsProviderAvailability:
         # openai-compatible should be available
         assert "openai_compatible" in data["available"]
 
-        # Should support all 4 types
+        # STT/TTS are disabled in this build - even though the underlying
+        # provider supports them, only language & embedding are advertised.
         assert "openai_compatible" in data["supported_types"]
         supported = data["supported_types"]["openai_compatible"]
         assert "language" in supported
         assert "embedding" in supported
-        assert "speech_to_text" in supported
-        assert "text_to_speech" in supported
-        assert len(supported) == 4
+        assert "speech_to_text" not in supported
+        assert "text_to_speech" not in supported
+        assert len(supported) == 2
 
     @patch("api.routers.models.os.environ.get")
     @patch("api.routers.models.AIFactory.get_available_providers")
@@ -290,14 +291,15 @@ class TestModelsProviderAvailability:
         # openai-compatible should be available
         assert "openai_compatible" in data["available"]
 
-        # Generic var enables all, so all 4 should be supported
+        # Generic var enables all four modes at the provider, but STT/TTS are
+        # disabled in this build so only language & embedding are advertised.
         assert "openai_compatible" in data["supported_types"]
         supported = data["supported_types"]["openai_compatible"]
         assert "language" in supported
         assert "embedding" in supported
-        assert "speech_to_text" in supported
-        assert "text_to_speech" in supported
-        assert len(supported) == 4
+        assert "speech_to_text" not in supported
+        assert "text_to_speech" not in supported
+        assert len(supported) == 2
 
     @patch("api.routers.models.os.environ.get")
     @patch("api.routers.models.AIFactory.get_available_providers")
@@ -362,7 +364,8 @@ class TestModelsProviderAvailability:
     @patch("api.routers.models.os.environ.get")
     @patch("api.routers.models.AIFactory.get_available_providers")
     def test_individual_mode_stt_only(self, mock_esperanto, mock_env, client):
-        """Test individual mode-specific var (STT only)."""
+        """STT is disabled in this build, so it is never advertised even when
+        the provider-specific STT env var is set."""
 
         # Mock environment: only STT specific var is set
         def env_side_effect(key):
@@ -387,12 +390,13 @@ class TestModelsProviderAvailability:
 
         # Should support only speech_to_text
         supported = data["supported_types"]["openai_compatible"]
-        assert supported == ["speech_to_text"]
+        assert supported == []
 
     @patch("api.routers.models.os.environ.get")
     @patch("api.routers.models.AIFactory.get_available_providers")
     def test_individual_mode_tts_only(self, mock_esperanto, mock_env, client):
-        """Test individual mode-specific var (TTS only)."""
+        """TTS is disabled in this build, so it is never advertised even when
+        the provider-specific TTS env var is set."""
 
         # Mock environment: only TTS specific var is set
         def env_side_effect(key):
@@ -417,7 +421,7 @@ class TestModelsProviderAvailability:
 
         # Should support only text_to_speech
         supported = data["supported_types"]["openai_compatible"]
-        assert supported == ["text_to_speech"]
+        assert supported == []
 
 
 class TestUpdateDefaultModels:

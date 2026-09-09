@@ -75,13 +75,11 @@ class Model(ObjectModel):
         Batch-fetch {provider, name} display info for many model IDs in one
         query.
 
-        Episode listing resolves the model references stored in the
-        denormalized episode/speaker profile snapshots (outline_llm,
-        transcript_llm, voice_model) into human-readable display fields.
-        Doing that with Model.get() would cost one round trip per reference
-        per episode (no connection pooling in the repository layer) - this
-        collects the distinct IDs and resolves them in a single query,
-        mirroring PodcastEpisode.get_job_details_for_commands().
+        Callers that render stored model references (e.g. snapshot fields on
+        records) resolve them into human-readable display fields. Doing that
+        with Model.get() would cost one round trip per reference per record
+        (no connection pooling in the repository layer) - this collects the
+        distinct IDs and resolves them in a single query.
 
         Unresolvable IDs (deleted models) are simply absent from the result;
         a total query failure returns an empty dict so display resolution

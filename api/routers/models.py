@@ -31,6 +31,15 @@ from open_notebook.exceptions import (
 
 router = APIRouter()
 
+# Multimedia model modalities removed from this build (we only want notebook +
+# AI-organizing). The underlying multi-modality code is kept dormant so the
+# provider/credential plumbing still works, but the app never advertises,
+# registers or assigns these modalities.
+DISABLED_MODEL_TYPES = frozenset({"text_to_speech", "speech_to_text"})
+DISABLED_DEFAULT_SLOTS = frozenset(
+    {"default_text_to_speech_model", "default_speech_to_text_model"}
+)
+
 
 # =============================================================================
 # Model Discovery Response Models
@@ -213,6 +222,14 @@ async def create_model(model_data: ModelCreate):
                 status_code=400,
                 detail=f"Invalid model type. Must be one of: {valid_types}",
             )
+        if model_data.type in DISABLED_MODEL_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Text-to-speech and speech-to-text models are not "
+                    "supported in this build"
+                ),
+            )
 
         # Check for duplicate model name under the same provider and type (case-insensitive)
         from open_notebook.database.repository import repo_query
@@ -357,6 +374,11 @@ async def update_default_models(defaults_data: DefaultModelsResponse):
             if value is None and field in REQUIRED_DEFAULTS:
                 raise InvalidInputError(
                     f"{field} is required and cannot be cleared, only reassigned"
+                )
+            if field in DISABLED_DEFAULT_SLOTS and value is not None:
+                raise InvalidInputError(
+                    f"{field} is not supported in this build "
+                    "(speech-to-text / text-to-speech are disabled)"
                 )
             setattr(defaults, field, value)
 
@@ -509,6 +531,13 @@ async def get_provider_availability():
                 for model_type, providers in esperanto_available.items():
                     if provider in providers:
                         supported_types[provider].append(model_type)
+
+        # This build has no podcast/voice features: never advertise the
+        # disabled modalities to the UI.
+        for provider in supported_types:
+            supported_types[provider] = [
+                t for t in supported_types[provider] if t not in DISABLED_MODEL_TYPES
+            ]
 
         return ProviderAvailabilityResponse(
             available=available_providers,
