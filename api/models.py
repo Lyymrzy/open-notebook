@@ -201,6 +201,43 @@ class TransformationExecuteResponse(BaseModel):
     model_id: Optional[str] = Field(None, description="Model ID used")
 
 
+class TransformationJobSubmitResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    job_id: str = Field(..., description="Unique identifier of the async job")
+    transformation_id: str = Field(..., description="ID of the transformation used")
+    status: str = Field(..., description="Initial job status (queued/running)")
+    model_id: Optional[str] = Field(None, description="Model ID used")
+
+
+class TransformationJobStatusResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    job_id: str = Field(..., description="Unique identifier of the async job")
+    status: str = Field(
+        ..., description="Job status: queued, running, done or error"
+    )
+    output: Optional[str] = Field(
+        None, description="Transformed text (present when status is done)"
+    )
+    error: Optional[str] = Field(
+        None, description="Error message (present when status is error)"
+    )
+    transformation_id: Optional[str] = Field(
+        None, description="ID of the transformation used"
+    )
+    model_id: Optional[str] = Field(None, description="Model ID used")
+    created: Optional[str] = Field(
+        None, description="Job creation timestamp (ISO 8601)"
+    )
+    started: Optional[str] = Field(
+        None, description="Job start timestamp (ISO 8601)"
+    )
+    finished: Optional[str] = Field(
+        None, description="Job finish timestamp (ISO 8601)"
+    )
+
+
 # Default Prompt API models
 class DefaultPromptResponse(BaseModel):
     transformation_instructions: str = Field(

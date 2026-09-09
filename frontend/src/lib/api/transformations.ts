@@ -5,6 +5,8 @@ import {
   UpdateTransformationRequest,
   ExecuteTransformationRequest,
   ExecuteTransformationResponse,
+  TransformationJobSubmitResponse,
+  TransformationJobStatusResponse,
   DefaultPrompt
 } from '@/lib/types/transformations'
 
@@ -35,6 +37,17 @@ export const transformationsApi = {
 
   execute: async (data: ExecuteTransformationRequest) => {
     const response = await apiClient.post<ExecuteTransformationResponse>('/transformations/execute', data)
+    return response.data
+  },
+
+  // Submit a transformation as a background job (202) and poll its status.
+  executeAsync: async (data: ExecuteTransformationRequest) => {
+    const response = await apiClient.post<TransformationJobSubmitResponse>('/transformations/execute-async', data)
+    return response.data
+  },
+
+  getJobStatus: async (jobId: string) => {
+    const response = await apiClient.get<TransformationJobStatusResponse>(`/transformations/jobs/${jobId}`)
     return response.data
   },
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,21 +28,46 @@ export function TransformationPlayground({ transformations, selectedTransformati
   const [inputText, setInputText] = useState('')
   const [modelId, setModelId] = useState('')
   const [output, setOutput] = useState('')
-  
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [, setNowTick] = useState(0)
+
   const executeTransformation = useExecuteTransformation()
+  const isRunning = executeTransformation.isPending
+
+  // Drive a 1-second ticker while a transformation is running so the button can
+  // show elapsed seconds even though the mutation is waiting on the job poll.
+  useEffect(() => {
+    if (!isRunning) {
+      setStartedAt(null)
+      return
+    }
+    const timer = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [isRunning])
+
+  const elapsedSeconds = startedAt
+    ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+    : 0
 
   const handleExecute = async () => {
     if (!selectedId || !modelId || !inputText.trim()) {
       return
     }
 
-    const result = await executeTransformation.mutateAsync({
-      transformation_id: selectedId,
-      input_text: inputText,
-      model_id: modelId
-    })
-
-    setOutput(result.output)
+    setStartedAt(Date.now())
+    setOutput('')
+    try {
+      const result = await executeTransformation.mutateAsync({
+        transformation_id: selectedId,
+        input_text: inputText,
+        model_id: modelId
+      })
+      setOutput(result)
+    } catch {
+      // Error toast is handled by the hook (useExecuteTransformation.onError).
+    } finally {
+      setStartedAt(null)
+    }
   }
 
   const canExecute = selectedId && modelId && inputText.trim() && !executeTransformation.isPending
@@ -109,6 +134,9 @@ export function TransformationPlayground({ transformations, selectedTransformati
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   {t('transformations.running')}
+                  {elapsedSeconds > 0 ? (
+                    <span className="ml-2 tabular-nums">({elapsedSeconds}s)</span>
+                  ) : null}
                 </>
               ) : (
                 <>

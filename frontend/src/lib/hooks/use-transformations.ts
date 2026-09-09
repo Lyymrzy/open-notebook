@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transformationsApi } from '@/lib/api/transformations'
+import { API_TIMEOUT_MS } from '@/lib/api/client'
 import { useToast } from '@/lib/hooks/use-toast'
 import { useTranslation } from '@/lib/hooks/use-translation'
 import { getApiErrorMessage } from '@/lib/utils/error-handler'
@@ -8,6 +9,10 @@ import {
   UpdateTransformationRequest,
   ExecuteTransformationRequest
 } from '@/lib/types/transformations'
+
+// Poll cadence for async transformation jobs.
+const POLL_INTERVAL_MS = 1000
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 // Add to QUERY_KEYS in query-client.ts
 export const TRANSFORMATION_QUERY_KEYS = {
@@ -111,7 +116,37 @@ export function useExecuteTransformation() {
   const { t } = useTranslation()
 
   return useMutation({
-    mutationFn: (data: ExecuteTransformationRequest) => transformationsApi.execute(data),
+    mutationFn: async (data: ExecuteTransformationRequest): Promise<string> => {
+      // Submit as a background job (202) and poll its status until it reaches a
+      // terminal state. This replaces the previous single long synchronous HTTP
+      // request (which silently hung for minutes on slow models) with a short
+      // submit + cheap status polls, so the UI can show live progress and give
+      // the backend a chance to report intermediate states.
+      const submitted = await transformationsApi.executeAsync(data)
+
+      // Bound the total wait with the same configurable budget the API client
+      // uses for long requests, so a wedged job surfaces an error instead of
+      // spinning forever.
+      const deadline = Date.now() + (API_TIMEOUT_MS || 600000)
+
+      for (;;) {
+        await sleep(POLL_INTERVAL_MS)
+        if (Date.now() > deadline) {
+          throw new Error('Transformation job timed out')
+        }
+
+        const job = await transformationsApi.getJobStatus(submitted.job_id)
+
+        if (job.status === 'done') {
+          return job.output ?? ''
+        }
+        if (job.status === 'error') {
+          // job.error holds the backend error message (already user-friendly).
+          throw new Error(job.error || 'Transformation failed')
+        }
+        // queued / running → keep polling
+      }
+    },
     onError: (error: unknown) => {
       toast({
         title: t('common.error'),
