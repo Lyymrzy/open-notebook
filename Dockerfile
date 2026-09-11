@@ -78,8 +78,12 @@ FROM python:3.12-slim-trixie AS runtime-base
 
 # Install only runtime system dependencies (no build tools)
 # Add Node.js 22.x LTS for running the frontend
+#
+# NOTE: ffmpeg is intentionally NOT installed. It existed for podcast/audio
+# generation, which this fork removed; apt pulled in a large dependency web
+# with it (libav*, libllvm19, Mesa/libGL, SDL2, cairo/pango, libtiff…) worth
+# ~400MB. Importing audio/video files as sources would need it back.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    ffmpeg \
     supervisor \
     curl \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
