@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from loguru import logger
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -219,6 +219,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The statically exported frontend (Next.js `out/`) is served from this same
+# process/port when present, so the whole app is a single origin. Absent in
+# development (no export), present in the Docker image at /app/frontend/out.
+FRONTEND_DIR = os.environ.get("OPEN_NOTEBOOK_FRONTEND_DIR", "/app/frontend/out")
+FRONTEND_ENABLED = os.path.isdir(FRONTEND_DIR)
+
 if CORS_IS_DEFAULT_WILDCARD:
     logger.warning(
         "CORS_ORIGINS is not set — API accepts cross-origin requests from any "
@@ -402,9 +408,29 @@ app.include_router(languages.router, prefix="/api", tags=["languages"])
 
 @app.get("/")
 async def root():
+    if FRONTEND_ENABLED:
+        return RedirectResponse(url="/notebooks/")
     return {"message": "Open Notebook API is running"}
 
 
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+# ---------------------------------------------------------------------------
+# Static frontend (same-origin hosting)
+# ---------------------------------------------------------------------------
+# Registered last so every API route above wins; this mount only catches what
+# they don't match. `html=True` maps directories to their index.html and adds
+# the trailing slash, which pairs with the export's `trailingSlash: true`.
+if FRONTEND_ENABLED:
+    from fastapi.staticfiles import StaticFiles
+
+    @app.get("/settings/api-keys", include_in_schema=False)
+    async def _legacy_api_keys_redirect():
+        # This was a Next.js redirect before the static export; keep old links
+        # working now that the frontend is served by this API.
+        return RedirectResponse(url="/settings/models/", status_code=301)
+
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

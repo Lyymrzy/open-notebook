@@ -76,18 +76,18 @@ FROM surrealdb/surrealdb:v2 AS surreal-binary
 # Stage 4: Shared runtime base (everything common to both variants)
 FROM python:3.12-slim-trixie AS runtime-base
 
-# Install only runtime system dependencies (no build tools)
-# Add Node.js 22.x LTS for running the frontend
+# Install only runtime system dependencies (no build tools, no Node.js).
 #
-# NOTE: ffmpeg is intentionally NOT installed. It existed for podcast/audio
-# generation, which this fork removed; apt pulled in a large dependency web
-# with it (libav*, libllvm19, Mesa/libGL, SDL2, cairo/pango, libtiff…) worth
-# ~400MB. Importing audio/video files as sources would need it back.
+# - Node.js is NOT installed: the frontend is a static export served by the API
+#   process on the same origin, so no Node runtime is needed at deploy time
+#   (Node still exists in the frontend-builder stage, at build time only).
+# - ffmpeg is intentionally NOT installed. It existed for podcast/audio
+#   generation, which this fork removed; apt pulled in a large dependency web
+#   with it (libav*, libllvm19, Mesa/libGL, SDL2, cairo/pango, libtiff…) worth
+#   ~400MB. Importing audio/video files as sources would need it back.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     supervisor \
     curl \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv using the official method
@@ -104,11 +104,9 @@ COPY . /app
 # Copy pre-downloaded tiktoken encoding from builder (outside /data/ — volume-mount safe)
 COPY --from=backend-builder /app/tiktoken-cache /app/tiktoken-cache
 
-# Copy built frontend from standalone output
-COPY --from=frontend-builder /app/frontend/.next/standalone /app/frontend/
-COPY --from=frontend-builder /app/frontend/.next/static /app/frontend/.next/static
-COPY --from=frontend-builder /app/frontend/public /app/frontend/public
-COPY --from=frontend-builder /app/frontend/start-server.js /app/frontend/start-server.js
+# Copy the statically exported frontend (`next build` with output: 'export').
+# It is served by the API process itself, from the same origin.
+COPY --from=frontend-builder /app/frontend/out /app/frontend/out
 
 # Ensure uv uses the existing venv without attempting network operations
 ENV UV_NO_SYNC=1
@@ -131,21 +129,15 @@ ENV HF_HOME=/app/data/.cache/huggingface
 RUN mkdir -p /app/data /var/log/supervisor \
     && chmod +x /app/scripts/wait-for-api.sh /app/scripts/docker-entrypoint.sh
 
-# Copy supervisord configuration (shared programs: api, worker, frontend)
+# Copy supervisord configuration (shared programs: api, worker)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Expose ports for Frontend and API
-EXPOSE 8502 5055
+# Single port: the API and the statically exported frontend share one origin.
+EXPOSE 5055
 
-# Runtime API URL Configuration
-# The API_URL environment variable can be set at container runtime to configure
-# where the frontend should connect to the API. This allows the same Docker image
-# to work in different deployment scenarios without rebuilding.
-#
-# If not set, the system will auto-detect based on incoming requests.
-# Set API_URL when using reverse proxies or custom domains.
-#
-# Example: docker run -e API_URL=https://your-domain.com/api ...
+# The frontend talks to the API with relative `/api/*` requests (same origin),
+# so no API_URL/INTERNAL_API_URL wiring is required. Set
+# OPEN_NOTEBOOK_FRONTEND_DIR to serve the export from a different path.
 
 # The entrypoint installs any opt-in heavy runtimes (Docling, Crawl4AI local)
 # enabled via OPEN_NOTEBOOK_ENABLE_* before handing off to CMD (supervisord).

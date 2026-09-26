@@ -37,6 +37,13 @@ class PasswordAuthMiddleware(BaseHTTPMiddleware):
         if not self.password:
             return await call_next(request)
 
+        # Only API endpoints require authentication. The same process also
+        # serves the statically exported frontend, and browser document/asset
+        # requests cannot carry the Bearer token the SPA keeps in storage —
+        # protecting those paths would make the UI unreachable.
+        if not request.url.path.startswith("/api"):
+            return await call_next(request)
+
         # Skip authentication for excluded paths
         if request.url.path in self.excluded_paths:
             return await call_next(request)
