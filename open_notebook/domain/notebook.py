@@ -8,7 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from surreal_commands import submit_command
 from surrealdb import RecordID
 
-from open_notebook.database.repository import ensure_record_id, repo_query
+from open_notebook.database.repository import (
+    ensure_record_id,
+    repo_query,
+    repo_update,
+)
 from open_notebook.domain.base import ObjectModel
 from open_notebook.exceptions import (
     DatabaseOperationError,
@@ -689,6 +693,21 @@ class Note(ObjectModel):
     title: Optional[str] = None
     note_type: Optional[Literal["human", "ai"]] = None
     content: Optional[str] = None
+    summary: Optional[str] = None
+    # Knowledge-tree metadata (migration 25). A note is either written by a human
+    # or produced by an AI pass; both live in the same tree, so these fields
+    # record how an AI note came to be and whether it is still trusted.
+    tags: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+    note_kind: Optional[str] = None
+    status: Optional[Literal["active", "stale", "archived"]] = None
+    # Set when the note is a proposed revision rather than an accepted note:
+    # "pending" until the user accepts or rejects it. AI never rewrites an
+    # existing note in place.
+    proposal_status: Optional[Literal["pending", "accepted", "rejected"]] = None
+    generated_by: Optional[str] = None
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
 
     @field_validator("content")
     @classmethod
@@ -737,6 +756,157 @@ class Note(ObjectModel):
             raise InvalidInputError("Notebook ID must be provided")
         await Notebook.get(notebook_id)  # raises NotFoundError if invalid/missing
         return await self.relate("artifact", notebook_id)
+
+    # ---------------------------------------------------------- knowledge tree
+    # The tree is carried by the `includes` edge instead of a parent field, so a
+    # note can legitimately sit under more than one topic without being copied.
+
+    async def _notes_from_id_query(self, id_query: str) -> List["Note"]:
+        """Fetch notes from a query that yields a flat list of note ids."""
+        if not self.id:
+            raise InvalidInputError("Cannot traverse from an unsaved note")
+        try:
+            rows = await repo_query(id_query, {"id": ensure_record_id(self.id)})
+            ids = [str(row) for row in rows if row]
+            if not ids:
+                return []
+            notes = await repo_query(
+                "SELECT * FROM note WHERE id IN $ids",
+                {"ids": [ensure_record_id(note_id) for note_id in ids]},
+            )
+            return [Note(**row) for row in notes]
+        except Exception as e:
+            logger.error(f"Error traversing knowledge tree from {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to traverse the knowledge tree")
+
+    async def add_child(self, child_id: str) -> Any:
+        """Attach another note as a subtopic of this one (grows the tree)."""
+        if not child_id:
+            raise InvalidInputError("Child note ID must be provided")
+        if self.id and str(child_id) == str(self.id):
+            raise InvalidInputError("A note cannot include itself")
+        await Note.get(child_id)  # raises NotFoundError if invalid/missing
+        return await self.relate("includes", child_id)
+
+    async def remove_child(self, child_id: str) -> None:
+        """Detach a subtopic without deleting the note itself."""
+        if not self.id or not child_id:
+            raise InvalidInputError("Both parent and child IDs are required")
+        try:
+            await repo_query(
+                "DELETE includes WHERE in = $parent AND out = $child",
+                {
+                    "parent": ensure_record_id(self.id),
+                    "child": ensure_record_id(child_id),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error removing child {child_id} from {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to detach subtopic")
+
+    async def link_related(self, other_id: str, reason: Optional[str] = None) -> Any:
+        """Cross-reference another note (the web on top of the tree)."""
+        if not other_id:
+            raise InvalidInputError("Related note ID must be provided")
+        return await self.relate(
+            "relates_to", other_id, {"reason": reason} if reason else {}
+        )
+
+    async def get_children(self) -> List["Note"]:
+        return await self._notes_from_id_query(
+            "SELECT VALUE out FROM includes WHERE in = $id"
+        )
+
+    async def get_parents(self) -> List["Note"]:
+        return await self._notes_from_id_query(
+            "SELECT VALUE in FROM includes WHERE out = $id"
+        )
+
+    async def get_related(self) -> List["Note"]:
+        return await self._notes_from_id_query(
+            """
+            SELECT VALUE out FROM relates_to WHERE in = $id
+            UNION
+            SELECT VALUE in FROM relates_to WHERE out = $id
+            """
+        )
+
+    async def is_leaf(self) -> bool:
+        """True when nothing grows out of this note yet.
+
+        Leaves are where exploration points are proposed: the frontier of what
+        the user has already understood.
+        """
+        if not self.id:
+            raise InvalidInputError("Cannot test an unsaved note for leaf status")
+        try:
+            rows = await repo_query(
+                "SELECT VALUE out FROM includes WHERE in = $id LIMIT 1",
+                {"id": ensure_record_id(self.id)},
+            )
+        except Exception as e:
+            logger.error(f"Error checking leaf status of {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to check leaf status")
+        return not rows
+
+    async def get_memories(
+        self, statuses: Optional[List[str]] = None
+    ) -> List[Any]:
+        """Memories the AI derived from this note."""
+        from open_notebook.domain.memory import MemoryItem
+
+        if not self.id:
+            raise InvalidInputError("Cannot read memories of an unsaved note")
+        try:
+            rows = await repo_query(
+                """
+                SELECT * FROM memory_item
+                WHERE id IN (SELECT VALUE in FROM derived_from WHERE out = $id)
+                  AND status IN $statuses
+                ORDER BY updated DESC
+                """,
+                {
+                    "id": ensure_record_id(self.id),
+                    "statuses": statuses or ["active", "pending", "stale"],
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error fetching memories for note {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to fetch note memories")
+        return [MemoryItem(**row) for row in rows]
+
+    async def get_exploration_points(
+        self, statuses: Optional[List[str]] = None
+    ) -> List[Any]:
+        """Proposals anchored on this note (usually a leaf)."""
+        from open_notebook.domain.exploration import ExplorationPoint
+
+        if not self.id:
+            raise InvalidInputError("Cannot read proposals of an unsaved note")
+        return await ExplorationPoint.get_for_note(str(self.id), statuses=statuses)
+
+    async def set_proposal_status(
+        self, proposal_status: str, status: Optional[str] = None
+    ) -> None:
+        """Accept or reject a proposed revision, optionally changing its status."""
+        if not self.id:
+            raise InvalidInputError("Cannot update an unsaved note")
+        data: Dict[str, Any] = {"proposal_status": proposal_status}
+        if status is not None:
+            data["status"] = status
+        try:
+            await repo_update(self.table_name, self.id, data)
+        except Exception as e:
+            logger.error(f"Error updating proposal status of {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to update proposal status")
+        self.proposal_status = proposal_status
+        if status is not None:
+            self.status = status
 
     def get_context(
         self, context_size: Literal["short", "long"] = "short"

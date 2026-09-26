@@ -15,6 +15,7 @@ from surreal_commands import CommandInput, CommandOutput, command, submit_comman
 
 from open_notebook.ai.models import model_manager
 from open_notebook.database.repository import ensure_record_id, repo_insert, repo_query
+from open_notebook.domain.memory import MemoryItem
 from open_notebook.domain.notebook import Note, Source, SourceInsight
 from open_notebook.exceptions import ConfigurationError, ContextLengthExceededError
 from open_notebook.utils.chunking import ContentType, chunk_text, detect_content_type
@@ -254,6 +255,55 @@ async def embed_note_command(input_data: EmbedNoteInput) -> EmbedNoteOutput:
     return EmbedNoteOutput(
         success=error_message is None,
         note_id=input_data.note_id,
+        processing_time=processing_time,
+        error_message=error_message,
+    )
+
+
+class EmbedMemoryInput(CommandInput):
+    """Input for embedding a single memory item."""
+
+    memory_id: str
+
+
+class EmbedMemoryOutput(CommandOutput):
+    """Output from memory embedding command."""
+
+    success: bool
+    memory_id: str
+    processing_time: float
+    error_message: Optional[str] = None
+
+
+@command("embed_memory", app="open_notebook", retry=EMBED_RETRY_CONFIG)
+async def embed_memory_command(input_data: EmbedMemoryInput) -> EmbedMemoryOutput:
+    """
+    Generate and store the embedding for a single memory item.
+
+    Memory items are retrieved through fn::memory_search (cosine similarity over
+    `memory_item.embedding`), so without this the memory plane would be keyword
+    only. Same retry contract as embed_note / embed_insight: transient failures
+    are retried, validation failures (ValueError) are permanent.
+    """
+
+    async def embed() -> Tuple[Dict[str, Any], str]:
+        return await _embed_markdown_record(
+            input_data,
+            label="Memory",
+            record_id=input_data.memory_id,
+            loader=MemoryItem.get,
+        )
+
+    _, processing_time, error_message = await _embed_record(
+        input_data,
+        kind="memory",
+        record_id=input_data.memory_id,
+        embed=embed,
+    )
+
+    return EmbedMemoryOutput(
+        success=error_message is None,
+        memory_id=input_data.memory_id,
         processing_time=processing_time,
         error_message=error_message,
     )

@@ -33,6 +33,10 @@ class ObjectModel(BaseModel):
     id: Optional[str] = None
     table_name: ClassVar[str] = ""
     nullable_fields: ClassVar[set[str]] = set()  # Fields that can be saved as None
+    # Fields holding a record reference (declared as `Optional[str]` in Python so
+    # that ids round-trip as strings, but stored as `record<T>` in SurrealDB).
+    # _prepare_save_data() converts them to RecordID on the way out.
+    record_fields: ClassVar[set[str]] = set()
     created: Optional[datetime] = None
     updated: Optional[datetime] = None
 
@@ -145,13 +149,13 @@ class ObjectModel(BaseModel):
                 return subclass
         return None
 
-    async def save(self) -> None:
+    async def save(self) -> Optional[str]:
         """
         Save the model to the database.
 
         Note: Embedding is no longer generated inline. Subclasses that need
         embedding should override save() to submit the appropriate embed_*
-        command after calling super().save().
+        command after calling super().save(), and may return that command id.
         """
         try:
             self.model_validate(self.model_dump(), strict=True)
@@ -194,13 +198,23 @@ class ObjectModel(BaseModel):
             logger.error(f"Error saving record: {e}")
             raise DatabaseOperationError(e)
 
+        # Base implementation has nothing extra to report; subclasses that submit
+        # an embedding command return its id instead.
+        return None
+
     def _prepare_save_data(self) -> Dict[str, Any]:
         data = self.model_dump()
-        return {
+        prepared = {
             key: value
             for key, value in data.items()
             if value is not None or key in self.__class__.nullable_fields
         }
+        # Record references are typed `record<T>` in SurrealDB (SCHEMAFULL), so a
+        # plain "table:key" string would be rejected; bind them as RecordIDs.
+        for field_name in self.__class__.record_fields:
+            if prepared.get(field_name):
+                prepared[field_name] = ensure_record_id(prepared[field_name])
+        return prepared
 
     async def delete(self) -> bool:
         if self.id is None:

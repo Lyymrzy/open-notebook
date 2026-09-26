@@ -10,6 +10,7 @@ ensure_internal_no_proxy()
 
 from .embedding_commands import (
     embed_insight_command,
+    embed_memory_command,
     embed_note_command,
     embed_source_command,
     rebuild_embeddings_command,
@@ -20,6 +21,7 @@ __all__ = [
     # Embedding commands
     "embed_note_command",
     "embed_insight_command",
+    "embed_memory_command",
     "embed_source_command",
     "rebuild_embeddings_command",
     # Other commands
