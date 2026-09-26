@@ -1,6 +1,6 @@
 # 前端静态导出迁移计划(方案①:FastAPI 同源单进程)
 
-- **状态**:已规划(Step 1 盘点完成 2026-09-11;Step 2 未实施)
+- **状态**:✅ 已实施(2026-09-26;Step 1 盘点 2026-09-11;镜像实测 2.07GB → **1.09GB**)
 - **相关**:[ADR-009](../decisions/ADR-009-notebook-ai-core-fork.md)(笔记本+AI 精简 fork)、分支 `wip/async-transformation-execute`
 - **目标**:去掉运行时 Node(前端不再跑 Next 服务端),体积再降 ~100–130MB,进程 3→2、端口 2→1
 
@@ -49,10 +49,10 @@
 | 位置 | 现状 | 改动 |
 |---|---|---|
 | `frontend/next.config.ts` | `output:'standalone'`、`rewrites()`、`redirects()`、`experimental.proxyClientMaxBodySize` | 改 `output:'export'` + `trailingSlash:true`;删 rewrites/proxyClientMaxBodySize;`/settings/api-keys` 重定向移到 FastAPI;可加 `images.unoptimized:true` |
-| `supervisord.conf` `[program:frontend]` | `node server.js`(8502) | 删除该 program |
-| `frontend/start-server.js` | 启 standalone server | 不再需要 |
+| `supervisord.conf` `[program:frontend]` | `node server.js`(8502) | ✅ 已删除该 program |
+| `frontend/start-server.js` | 启 standalone server | ✅ 已删除;`package.json` 的 `start` 一并去掉 |
 | `Dockerfile`(runtime-base) | apt 装 Node.js 22;拷 `.next/standalone`/`.next/static`/`public`/`start-server.js`;`EXPOSE 8502 5055` | runtime **不再装 nodejs**;改拷 `out/`;`EXPOSE 5055` |
-| `scripts/wait-for-api.sh` | 被 frontend program 使用 | 随 frontend program 移除/保留无碍 |
+| `scripts/wait-for-api.sh` | 被 frontend program 使用 | ✅ 已删除 |
 
 ### E. 后端(FastAPI 托管静态)
 
@@ -69,6 +69,38 @@
 4. **测试**:删/改 `config/route.test.ts` 及引用被删文件的用例;`npm run build` 产出 `out/` 校验。
 5. **验证**(见下)。
 
+## 实施结果(2026-09-26)
+
+| 阶段 | 内容 | 提交 |
+|---|---|---|
+| A 前端 | `output:'export'`、删服务端路由/中间件、动态路由改查询参数 | `db6658d` |
+| B 后端 | `StaticFiles` 同源托管、根路径重定向、鉴权仅限 `/api`、旧链接 301 | `1a8ad1b` |
+| C 镜像 | runtime 去 Node、只拷 `out/`、`EXPOSE 5055`、supervisord 只剩 api+worker | `1a8ad1b` |
+| 收尾 | 单端口 compose、删 `start-server.js`/`wait-for-api.sh`、旧深链 301 | `bc4658c` |
+| 修复 | 深链重写改中间件(见下“踩坑”)| `c4983f7` |
+
+实测(容器 `127.0.0.1:5055` 单端口):`/` 307 → `/notebooks/`;页面/RSC 载荷均 200;旧深链 301;
+SSE 聊天端到端(回复已落库、含来源引用);播客路由仍 404;`/usr` 224MB、`frontend/out` 9.4MB、镜像 1.09GB。
+
+### 踩坑:导出的 RSC 载荷文件名会被通配路由吞掉
+
+`next build`(export)除了 `notebooks/index.html` 还会产出 `notebooks/index.txt`
+（客户端路由预取用的 RSC 载荷）。最初的旧深链兼容写成 `@app.get("/notebooks/{notebook_id}")`
+通配路由,于是 `/notebooks/index.txt` 被当成 id → 301 到 `/notebooks/view?id=index.txt`,
+SPA 跟着跳过去显示“笔记本不存在”,再请求 `/api/notebooks/index.txt` → 500
+(`No class found for table index.txt`)。
+
+**做法**:改用中间件 + 精确正则 `^/(notebooks|sources)/([^/]+)$`,且只重写**含 `:` 的真实记录 id**
+(`notebook:abc123`),其余一律留给静态挂载。新增类似兼容时不要用 `{param}` 通配路由。
+
+## 遗留(未做/可选)
+
+- 上游文档与示例(README、`docs/0-START-HERE`、`docs/5-CONFIGURATION`、`examples/*`、`scripts/release-test/*`)
+  仍描述 8502(Next 服务端)拓扑,本次未改:与本 fork 的单端口形态不一致,按需同步。
+- `/api/providers` 的 `modalities` 仍列出 `text_to_speech`/`speech_to_text`(provider 目录元数据,
+  非可用模型类型;创建/默认/发现三处已拦截)。
+- `frontend/src/app/dev/design` 静态导出后仍可访问(`/dev/design`);如需隐藏需加门控。
+
 ## 验证清单
 
 - 深链刷新:`/`、`/notebooks`、`/notebooks?id=…`、`/sources?id=…`、`/transformations`、`/settings/models`。
@@ -80,7 +112,7 @@
 
 ## 风险
 
-- **SSE 缓冲**:同源直连后无 Next 中转,风险低;仍需实测流式逐块到达。
-- **深链一致性**:`trailingSlash` 与目录式 `index.html` 需与 FastAPI `StaticFiles(html=True)` 配合;旧 `/notebooks/<id>` 会 404 → 用可选 301 兼容。
-- **dev/design 暴露**:导出后成为普通静态页,必须门控或删除。
-- **行为变化**:根路径由客户端/host 重定向替换,注意首屏闪烁与 SSR 之外的初始化顺序。
+- ~~**SSE 缓冲**~~:已实测逐块流式正常(同源直连无中转)。
+- ~~**深链一致性**~~:已用 301 兼容旧 `/notebooks/<id>`;注意别用通配路由(见上“踩坑”)。
+- **dev/design 暴露**:导出后 `/dev/design` 成为普通静态页,尚未门控。
+- **行为变化**:根路径重定向与静态托管由服务端接管,首屏不再经过 Next 服务端。

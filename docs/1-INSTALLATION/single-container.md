@@ -25,8 +25,8 @@ services:
     image: lfnovo/open_notebook:v1-latest-single
     pull_policy: always
     ports:
-      - "8502:8502"  # Web UI (React frontend)
-      - "5055:5055"  # API
+      # Single port: the API also serves the web UI
+      - "5055:5055"  # Web UI + API
     environment:
       - OPEN_NOTEBOOK_ENCRYPTION_KEY=change-me-to-a-secret-string
       - SURREAL_URL=ws://localhost:8000/rpc
@@ -44,7 +44,7 @@ Run:
 docker compose up -d
 ```
 
-Access: `http://localhost:8502`
+Access: `http://localhost:5055`
 
 Then configure your AI provider:
 1. Go to **Manage** → **Models**
@@ -77,7 +77,7 @@ Then configure your AI provider:
 **DigitalOcean App Platform:**
 1. Create new app from Docker Hub
 2. Use image: `lfnovo/open_notebook:v1-latest-single`
-3. Set port to 8502
+3. Set port to 5055
 4. Add environment variables (at minimum: `OPEN_NOTEBOOK_ENCRYPTION_KEY`)
 5. Configure persistent storage
 
@@ -92,7 +92,7 @@ heroku config:set OPEN_NOTEBOOK_ENCRYPTION_KEY=your-secret-key
 **Coolify:**
 1. Add new service → Docker Image
 2. Image: `lfnovo/open_notebook:v1-latest-single`
-3. Port: 8502
+3. Port: 5055
 4. Add environment variables (at minimum: `OPEN_NOTEBOOK_ENCRYPTION_KEY`)
 5. Enable persistent volumes
 6. Coolify handles HTTPS automatically
@@ -138,7 +138,7 @@ AI provider API keys are configured via the **Manage → Models** UI after deplo
 
 ## Next Steps
 
-Same as Docker Compose setup - just access via `http://localhost:8502` (local) or your platform's URL (cloud).
+Same as Docker Compose setup - just access via `http://localhost:5055` (local) or your platform's URL (cloud).
 
 1. Go to **Manage → Models** to add your AI provider credential
 2. **Test Connection** and **Discover Models**

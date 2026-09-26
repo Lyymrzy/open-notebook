@@ -73,7 +73,7 @@ docker-build-local:
 		-t $(DOCKERHUB_IMAGE):local \
 		.
 	@echo "✅ Built $(DOCKERHUB_IMAGE):$(VERSION) and $(DOCKERHUB_IMAGE):local"
-	@echo "Run with: docker run -p 5055:5055 -p 3000:3000 $(DOCKERHUB_IMAGE):local"
+	@echo "Run with: docker run -p 5055:5055 $(DOCKERHUB_IMAGE):local"
 
 # Build and push version tags ONLY (no latest) for both regular and single images
 docker-push: docker-buildx-prepare

@@ -110,13 +110,13 @@ Before installing, you'll need:
 1. Install [Docker Desktop](https://docker.com/products/docker-desktop)
 2. Follow [Docker Compose](docker-compose.md) installation
 3. Follow the step-by-step guide
-4. Access at `http://localhost:8502`
+4. Access at `http://localhost:5055`
 
 ### For Source Installation (Developers)
 1. Have Python 3.11+, Node.js 18+, Git installed
 2. Follow [From Source](from-source.md)
 3. Run `make start-all`
-4. Access at `http://localhost:8502` (frontend) or `http://localhost:5055` (API)
+4. Access the frontend dev server at `http://localhost:3000` (API at `http://localhost:5055`)
 
 ---
 

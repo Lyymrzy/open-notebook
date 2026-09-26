@@ -156,6 +156,14 @@ class TestProvidersEndpoint:
         assert openai["docs_url"].startswith("https://")
         assert isinstance(openai["env_configured"], bool)
 
+    def test_hides_disabled_audio_modalities(self, client):
+        # Audio model types are disabled in this fork (api/routers/models.py),
+        # so they must not be advertised here either - the UI would otherwise
+        # offer a modality that model creation and discovery reject.
+        data = client.get("/api/providers").json()
+        advertised = {modality for p in data for modality in p["modalities"]}
+        assert not advertised & {"text_to_speech", "speech_to_text"}
+
 
 class TestCreateCredentialRequestValidation:
     @pytest.mark.parametrize("provider", KNOWN_GOOD_PROVIDERS)

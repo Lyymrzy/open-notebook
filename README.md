@@ -141,8 +141,8 @@ services:
   open_notebook:
     image: lfnovo/open_notebook:v1-latest
     ports:
-      - "8502:8502"  # Web UI
-      - "5055:5055"  # REST API
+      # Single port: the API also serves the web UI
+      - "5055:5055"  # Web UI + REST API
     environment:
       # REQUIRED: Change this to your own secret string
       # This encrypts your API keys in the database
@@ -176,7 +176,7 @@ to any secret value (e.g., `my-super-secret-key-123`)
 docker compose up -d
 ```
 
-Wait 15-20 seconds, then open: **http://localhost:8502**
+Wait 15-20 seconds, then open: **http://localhost:5055**
 
 ### Step 4: Configure AI Provider
 1. Go to **Models** and choose your provider (OpenAI, Anthropic, Google, etc.)
