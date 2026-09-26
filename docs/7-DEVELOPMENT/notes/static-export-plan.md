@@ -93,6 +93,19 @@ SPA 跟着跳过去显示“笔记本不存在”,再请求 `/api/notebooks/inde
 **做法**:改用中间件 + 精确正则 `^/(notebooks|sources)/([^/]+)$`,且只重写**含 `:` 的真实记录 id**
 (`notebook:abc123`),其余一律留给静态挂载。新增类似兼容时不要用 `{param}` 通配路由。
 
+### 踩坑:路由参数搬进查询串后,会和既有查询键撞车
+
+模态框原先用 `?modal=<type>&id=<内容 id>` 表达状态。路由参数搬进查询串后,承载模态框的页面
+**自己就用 `id`**(`/notebooks/view?id=<笔记本 id>`),于是:
+
+- 在笔记本页点引用/来源卡片 → `openModal` 把 `id` 覆盖成 source id → 页面拿 source id 当笔记本 id
+  去请求 `/api/notebooks/source:…` → 报错边界替代整个界面(“Error / Please try refreshing the page”);
+- 关闭模态框时 `params.delete('id')` → 连笔记本 id 一起删掉。
+
+**做法**:模态框改用独立键 `modalId`,只增删 `modal`/`modalId`,不碰页面参数;并补了回归用例
+(“页面级 `id` 不得被当作模态框内容 id”)。**教训**:把路径参数改成查询参数时,必须检查该路径上
+已有的查询键(`id`、`modal`、`q`、`mode`…)是否已被别的运行时状态占用。
+
 ## 遗留(未做/可选)
 
 - 上游文档与示例(README、`docs/0-START-HERE`、`docs/5-CONFIGURATION`、`examples/*`、`scripts/release-test/*`)
