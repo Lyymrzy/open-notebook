@@ -24,10 +24,10 @@ interface RecentlyViewedProps {
 
 function getItemHref(item: RecentlyViewedResponse) {
   if (item.type === 'notebook') {
-    return `/notebooks/${encodeURIComponent(item.id)}`
+    return `/notebooks/view?id=${encodeURIComponent(item.id)}`
   }
 
-  return `/sources/${item.id}`
+  return `/sources/view?id=${encodeURIComponent(item.id)}`
 }
 
 function formatViewedAt(value: string, locale: Locale) {

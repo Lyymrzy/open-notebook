@@ -222,7 +222,7 @@ export function CommandPalette() {
               <CommandItem
                 key={notebook.id}
                 value={`notebook ${notebook.name} ${notebook.description || ''}`}
-                onSelect={() => handleNavigate(`/notebooks/${notebook.id}`)}
+                onSelect={() => handleNavigate(`/notebooks/view?id=${encodeURIComponent(notebook.id)}`)}
               >
                 <Book className="h-4 w-4" />
                 <span>{notebook.name}</span>

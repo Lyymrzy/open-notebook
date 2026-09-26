@@ -64,29 +64,10 @@ async function fetchConfig(): Promise<AppConfig> {
     console.log('🔧 [Config] Build time:', BUILD_TIME)
   }
 
-  // STEP 1: Try to get runtime config from Next.js server-side endpoint
-  // This allows API_URL to be set at runtime (not baked into build)
-  // Note: Endpoint is at /config (not /api/config) to avoid reverse proxy conflicts
-  let runtimeApiUrl: string | null = null
-  try {
-    if (isDev) console.log('🔧 [Config] Attempting to fetch runtime config from /config endpoint...')
-    const runtimeResponse = await fetch('/config', {
-      cache: 'no-store',
-    })
-    if (runtimeResponse.ok) {
-      const runtimeData = await runtimeResponse.json()
-      runtimeApiUrl = runtimeData.apiUrl
-      // Treat empty string as "not set" to allow fallback to env var or default
-      if (runtimeApiUrl === '') {
-        runtimeApiUrl = null
-      }
-      if (isDev) console.log('✅ [Config] Runtime API URL from server:', runtimeApiUrl)
-    } else {
-      if (isDev) console.log('⚠️ [Config] Runtime config endpoint returned status:', runtimeResponse.status)
-    }
-  } catch (error) {
-    if (isDev) console.log('⚠️ [Config] Could not fetch runtime config:', error)
-  }
+  // STEP 1: same-origin deployment. The static export is served by the FastAPI
+  // backend, so relative calls (`''` → `/api/*`) reach the API directly. The
+  // old server-side `/config` endpoint no longer exists in an export.
+  const runtimeApiUrl: string | null = null
 
   // STEP 2: Fallback to build-time environment variable
   const envApiUrl = process.env.NEXT_PUBLIC_API_URL

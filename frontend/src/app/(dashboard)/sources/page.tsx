@@ -125,7 +125,7 @@ export default function SourcesPage() {
         case 'Enter':
           e.preventDefault()
           if (sources[selectedIndex]) {
-            router.push(`/sources/${sources[selectedIndex].id}`)
+            router.push(`/sources/view?id=${encodeURIComponent(sources[selectedIndex].id)}`)
           }
           break
         case 'Home':
@@ -258,7 +258,7 @@ export default function SourcesPage() {
 
   const handleRowClick = useCallback((index: number, sourceId: string) => {
     setSelectedIndex(index)
-    router.push(`/sources/${sourceId}`)
+    router.push(`/sources/view?id=${encodeURIComponent(sourceId)}`)
   }, [router])
 
   const handleDeleteClick = useCallback((e: React.MouseEvent, source: SourceListResponse) => {

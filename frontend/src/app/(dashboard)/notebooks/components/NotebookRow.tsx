@@ -38,7 +38,7 @@ export function NotebookRow({ notebook }: NotebookRowProps) {
   }
 
   const handleRowClick = () => {
-    router.push(`/notebooks/${encodeURIComponent(notebook.id)}`)
+    router.push(`/notebooks/view?id=${encodeURIComponent(notebook.id)}`)
   }
 
   return (
@@ -54,7 +54,7 @@ export function NotebookRow({ notebook }: NotebookRowProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <Link
-              href={`/notebooks/${encodeURIComponent(notebook.id)}`}
+              href={`/notebooks/view?id=${encodeURIComponent(notebook.id)}`}
               onClick={(e) => e.stopPropagation()}
               className="font-medium truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >

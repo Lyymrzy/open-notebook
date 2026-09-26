@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { Suspense, useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AppShell } from '@/components/layout/AppShell'
 import { NotebookHeader } from '../components/NotebookHeader'
 import { SourcesColumn } from '../components/SourcesColumn'
@@ -27,17 +27,30 @@ import {
   type NoteContextDefault,
 } from '@/lib/utils/source-context'
 
-// Re-exported from the shared types module for backward compatibility; several
-// components historically import these from this route file.
 import type { ContextMode, ContextSelections, NoteContextMode } from '@/lib/types/notebook-context'
-export type { ContextMode, ContextSelections, NoteContextMode }
 
 export default function NotebookPage() {
-  const { t } = useTranslation()
-  const params = useParams()
+  // Static export: `useSearchParams()` must sit under a Suspense boundary.
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      }
+    >
+      <NotebookPageInner />
+    </Suspense>
+  )
+}
 
-  // Ensure the notebook ID is properly decoded from URL
-  const notebookId = params?.id ? decodeURIComponent(params.id as string) : ''
+function NotebookPageInner() {
+  const { t } = useTranslation()
+  const searchParams = useSearchParams()
+
+  // The id lives in the query string (`/notebooks/view?id=…`) because a static
+  // export cannot pre-render dynamic path segments for database ids.
+  const notebookId = searchParams?.get('id') ?? ''
 
   const { data: notebook, isLoading: notebookLoading } = useNotebook(notebookId)
   const {

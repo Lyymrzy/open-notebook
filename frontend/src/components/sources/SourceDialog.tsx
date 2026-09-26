@@ -28,7 +28,7 @@ export function SourceDialog({ open, onOpenChange, sourceId }: SourceDialogProps
   const handleChatClick = () => {
     if (sourceIdWithPrefix) {
       onOpenChange(false)
-      router.push(`/sources/${sourceIdWithPrefix}`)
+      router.push(`/sources/view?id=${encodeURIComponent(sourceIdWithPrefix)}`)
     }
   }
 

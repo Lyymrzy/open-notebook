@@ -19,26 +19,21 @@ describe('Config Priority', () => {
     global.fetch = originalFetch
   })
 
-  it('should prioritize runtime config over everything else', async () => {
-    // Setup: Env var set, Runtime config returns explicit value
+  it('should use the build-time env var when set', async () => {
+    // The static export has no server-side `/config` endpoint: the API base is
+    // the env var (or same-origin ''), and only `/api/config` is fetched.
     process.env.NEXT_PUBLIC_API_URL = 'http://env-url.com'
-    
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ apiUrl: 'http://runtime-url.com' }),
-    } as Response)
 
-    // Mock the second fetch call (api/config check)
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ version: '1.0.0' }),
     } as Response)
 
     const url = await getApiUrl()
-    expect(url).toBe('http://runtime-url.com')
+    expect(url).toBe('http://env-url.com')
   })
 
-  it('should fall back to env var if runtime config returns empty/null', async () => {
+  it('should use the env var even when the backend config response has no apiUrl', async () => {
     // Setup: Env var set, Runtime config returns empty string (simulating not set)
     process.env.NEXT_PUBLIC_API_URL = 'http://env-url.com'
     
@@ -58,7 +53,7 @@ describe('Config Priority', () => {
     expect(url).toBe('http://env-url.com')
   })
 
-  it('should fall back to env var if runtime config returns empty object', async () => {
+  it('should use the env var when the backend config response is an empty object', async () => {
     // Setup: Env var set, Runtime config returns empty object
     process.env.NEXT_PUBLIC_API_URL = 'http://env-url.com'
     
@@ -78,7 +73,7 @@ describe('Config Priority', () => {
     expect(url).toBe('http://env-url.com')
   })
 
-  it('should use default (relative path) if both runtime and env are missing', async () => {
+  it('should use same-origin (relative path) when the env var is missing', async () => {
     // Setup: Env var NOT set, Runtime config returns empty
     delete process.env.NEXT_PUBLIC_API_URL
     

@@ -1,18 +1,36 @@
 'use client'
 
-import { useRouter, useParams } from 'next/navigation'
-import { useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { useSourceChat } from '@/lib/hooks/use-source-chat'
 import { ChatPanel } from '@/components/sources/ChatPanel'
 import { useNavigation } from '@/lib/hooks/use-navigation'
 import { SourceDetailContent } from '@/components/sources/SourceDetailContent'
+import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 
 export default function SourceDetailPage() {
+  // Static export: `useSearchParams()` must sit under a Suspense boundary.
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      }
+    >
+      <SourceDetailPageInner />
+    </Suspense>
+  )
+}
+
+function SourceDetailPageInner() {
   const router = useRouter()
-  const params = useParams()
-  const sourceId = params?.id ? decodeURIComponent(params.id as string) : ''
+  const searchParams = useSearchParams()
+  // The id lives in the query string (`/sources/view?id=…`) because a static
+  // export cannot pre-render dynamic path segments for database ids.
+  const sourceId = searchParams?.get('id') ?? ''
   const navigation = useNavigation()
 
   // Initialize source chat

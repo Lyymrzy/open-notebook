@@ -7,7 +7,7 @@ import { ChatPanel } from '@/components/sources/ChatPanel'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { Card, CardContent } from '@/components/ui/card'
 import { AlertCircle } from 'lucide-react'
-import { ContextSelections } from '../[id]/page'
+import { ContextSelections } from '@/lib/types/notebook-context'
 import { useTranslation } from '@/lib/hooks/use-translation'
 import { SourceListResponse } from '@/lib/types/api'
 
