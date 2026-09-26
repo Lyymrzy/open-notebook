@@ -127,7 +127,7 @@ ENV HF_HOME=/app/data/.cache/huggingface
 
 # Data directory (volume-mounted by users) and supervisor log directory
 RUN mkdir -p /app/data /var/log/supervisor \
-    && chmod +x /app/scripts/wait-for-api.sh /app/scripts/docker-entrypoint.sh
+    && chmod +x /app/scripts/docker-entrypoint.sh
 
 # Copy supervisord configuration (shared programs: api, worker)
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

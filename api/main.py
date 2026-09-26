@@ -13,6 +13,7 @@ ensure_internal_no_proxy()
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -432,5 +433,25 @@ if FRONTEND_ENABLED:
         # This was a Next.js redirect before the static export; keep old links
         # working now that the frontend is served by this API.
         return RedirectResponse(url="/settings/models/", status_code=301)
+
+    # Pre-export deep links (/notebooks/<id>, /sources/<id>) now live at
+    # /notebooks/view?id=<id> and /sources/view?id=<id>: keep bookmarks and
+    # shared links working. "view" is the real page route, not an id, so it is
+    # excluded (the static files must serve it).
+    @app.get("/notebooks/{notebook_id}", include_in_schema=False)
+    async def _legacy_notebook_link(notebook_id: str):
+        if notebook_id == "view":
+            return RedirectResponse(url="/notebooks/view/", status_code=301)
+        return RedirectResponse(
+            url=f"/notebooks/view?id={quote(notebook_id)}", status_code=301
+        )
+
+    @app.get("/sources/{source_id}", include_in_schema=False)
+    async def _legacy_source_link(source_id: str):
+        if source_id == "view":
+            return RedirectResponse(url="/sources/view/", status_code=301)
+        return RedirectResponse(
+            url=f"/sources/view?id={quote(source_id)}", status_code=301
+        )
 
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
