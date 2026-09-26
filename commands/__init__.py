@@ -15,6 +15,10 @@ from .embedding_commands import (
     embed_source_command,
     rebuild_embeddings_command,
 )
+from .iterate_commands import (
+    refine_note_command,
+    synthesize_notes_command,
+)
 from .source_commands import process_source_command
 
 __all__ = [
@@ -24,6 +28,9 @@ __all__ = [
     "embed_memory_command",
     "embed_source_command",
     "rebuild_embeddings_command",
+    # Knowledge iteration commands
+    "synthesize_notes_command",
+    "refine_note_command",
     # Other commands
     "process_source_command",
 ]

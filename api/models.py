@@ -275,6 +275,72 @@ class NoteResponse(BaseModel):
     created: str
     updated: str
     command_id: Optional[str] = None
+    # Knowledge-tree metadata (migration 25). All optional so pre-existing
+    # notes and older clients are unaffected.
+    summary: Optional[str] = None
+    tags: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+    note_kind: Optional[str] = None
+    status: Optional[str] = None
+    proposal_status: Optional[str] = None
+    generated_by: Optional[str] = None
+
+
+class NoteProposalResponse(NoteResponse):
+    """A pending refinement proposal, with what it wants to replace.
+
+    `previous_content` is the target's content at the time the proposal was
+    created, so a client can show a diff without a second request.
+    """
+
+    target_note_id: Optional[str] = None
+    previous_content: Optional[str] = None
+
+
+class SynthesizeNotesRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    note_ids: List[str] = Field(
+        default_factory=list, description="Note IDs to consolidate"
+    )
+    source_ids: List[str] = Field(
+        default_factory=list, description="Source IDs to consolidate"
+    )
+    notebook_id: Optional[str] = Field(
+        None, description="Notebook the new note is added to"
+    )
+    parent_note_id: Optional[str] = Field(
+        None, description="Note the new note grows out of (tree edge)"
+    )
+    instructions: Optional[str] = Field(
+        None, description="Extra guidance for the model"
+    )
+    model_id: Optional[str] = Field(None, description="Model ID to use")
+
+
+class RefineNoteRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    note_id: str = Field(..., description="Note to revise")
+    source_ids: List[str] = Field(
+        default_factory=list, description="New evidence to take into account"
+    )
+    instructions: Optional[str] = Field(
+        None, description="Extra guidance for the model"
+    )
+    model_id: Optional[str] = Field(None, description="Model ID to use")
+
+
+class IterateJobResponse(BaseModel):
+    """A submitted iteration job. Poll GET /api/commands/jobs/{job_id} for it."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    job_id: str = Field(..., description="Async job id to poll")
+    status: str = Field(..., description="Initial job status (queued)")
+    parent_note_id: Optional[str] = Field(
+        None, description="Parent note the result grows out of (synthesize only)"
+    )
 
 
 # Embedding API models

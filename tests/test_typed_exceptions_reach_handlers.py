@@ -44,7 +44,7 @@ CASES = [
     ("source_chat", "api.routers._chat_shared.Source.get", "GET", "/api/sources/xyz/chat/sessions", None),
     ("sources", "api.routers.sources.repo_query", "GET", "/api/sources", None),
     ("notebooks", "api.routers.notebooks.repo_query", "GET", "/api/notebooks", None),
-    ("notes", "api.routers.notes.Note.get_all", "GET", "/api/notes", None),
+    ("notes", "api.routers.notes.Note.get_knowledge_notes", "GET", "/api/notes", None),
     ("models", "api.routers.models.Model.get_all", "GET", "/api/models", None),
     ("commands", "api.routers.commands.CommandService.get_command_status", "GET", "/api/commands/jobs/command:abc", None),
     ("credentials", "api.routers.credentials.Credential.get_all", "GET", "/api/credentials", None),

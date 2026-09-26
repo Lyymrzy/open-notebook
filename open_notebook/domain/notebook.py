@@ -908,6 +908,73 @@ class Note(ObjectModel):
         if status is not None:
             self.status = status
 
+    @classmethod
+    async def get_knowledge_notes(
+        cls, order_by: Optional[str] = "updated desc"
+    ) -> List["Note"]:
+        """Every real knowledge note - unaccepted proposals excluded.
+
+        A refinement proposal is a note row with `proposal_status` set, so
+        anything that lists or aggregates notes must go through this instead of
+        `get_all()`, or half-baked AI revisions leak into the user's view.
+        """
+        query = "SELECT * FROM note WHERE proposal_status = NONE"
+        if order_by:
+            query += f" ORDER BY {cls._validate_order_by(order_by)}"
+        try:
+            rows = await repo_query(query)
+        except Exception as e:
+            logger.error(f"Error fetching knowledge notes: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to fetch knowledge notes")
+        return [cls(**row) for row in rows]
+
+    @classmethod
+    async def get_pending_proposals(cls) -> List["Note"]:
+        """Refinement proposals waiting for the user's decision."""
+        try:
+            rows = await repo_query(
+                "SELECT * FROM note WHERE proposal_status = 'pending' "
+                "ORDER BY updated DESC"
+            )
+        except Exception as e:
+            logger.error(f"Error fetching pending proposals: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to fetch pending proposals")
+        return [cls(**row) for row in rows]
+
+    async def get_derived_from(self) -> List[Dict[str, Any]]:
+        """Records this note was derived from, with the provenance edge data."""
+        if not self.id:
+            raise InvalidInputError("Cannot read provenance of an unsaved note")
+        try:
+            rows = await repo_query(
+                "SELECT out, kind, previous_content FROM derived_from WHERE in = $id",
+                {"id": ensure_record_id(self.id)},
+            )
+        except Exception as e:
+            logger.error(f"Error fetching provenance for note {self.id}: {str(e)}")
+            logger.exception(e)
+            raise DatabaseOperationError("Failed to fetch note provenance")
+        return rows
+
+    async def apply_refinement(self, proposal: "Note") -> None:
+        """Adopt an accepted refinement proposal into this note.
+
+        The only place an existing note's body is replaced, and it only ever
+        runs after the user accepted the proposal. The proposal is archived
+        rather than deleted so the change stays auditable (the pre-revision text
+        lives on the proposal's provenance edge, captured when it was created).
+        """
+        if not proposal or not proposal.content or not proposal.content.strip():
+            raise InvalidInputError("A refinement proposal with content is required")
+
+        self.title = proposal.title or self.title
+        self.content = proposal.content
+        self.status = "active"
+        await self.save()
+        await proposal.set_proposal_status("accepted", status="archived")
+
     def get_context(
         self, context_size: Literal["short", "long"] = "short"
     ) -> Dict[str, Any]:
