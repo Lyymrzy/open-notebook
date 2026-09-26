@@ -12,6 +12,7 @@ ensure_internal_no_proxy()
 
 import asyncio
 import os
+import re
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
@@ -436,22 +437,24 @@ if FRONTEND_ENABLED:
 
     # Pre-export deep links (/notebooks/<id>, /sources/<id>) now live at
     # /notebooks/view?id=<id> and /sources/view?id=<id>: keep bookmarks and
-    # shared links working. "view" is the real page route, not an id, so it is
-    # excluded (the static files must serve it).
-    @app.get("/notebooks/{notebook_id}", include_in_schema=False)
-    async def _legacy_notebook_link(notebook_id: str):
-        if notebook_id == "view":
-            return RedirectResponse(url="/notebooks/view/", status_code=301)
-        return RedirectResponse(
-            url=f"/notebooks/view?id={quote(notebook_id)}", status_code=301
-        )
+    # shared links working.
+    #
+    # A middleware (not a `/{record_id}` route) does the rewrite: the export
+    # ships generated RSC payloads named like the route they belong to, e.g.
+    # /notebooks/index.txt, which a catch-all route would swallow and redirect
+    # to the view page with id="index.txt". Record ids always contain ":"
+    # (notebook:abc123), so requiring it targets only real deep links and leaves
+    # every generated file to the static mount below.
+    _legacy_deep_link = re.compile(r"^/(notebooks|sources)/([^/]+)$")
 
-    @app.get("/sources/{source_id}", include_in_schema=False)
-    async def _legacy_source_link(source_id: str):
-        if source_id == "view":
-            return RedirectResponse(url="/sources/view/", status_code=301)
-        return RedirectResponse(
-            url=f"/sources/view?id={quote(source_id)}", status_code=301
-        )
+    @app.middleware("http")
+    async def _legacy_deep_link_redirect(request: Request, call_next):
+        match = _legacy_deep_link.match(request.url.path)
+        if match and ":" in match.group(2):
+            section, record_id = match.groups()
+            return RedirectResponse(
+                url=f"/{section}/view?id={quote(record_id)}", status_code=301
+            )
+        return await call_next(request)
 
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
