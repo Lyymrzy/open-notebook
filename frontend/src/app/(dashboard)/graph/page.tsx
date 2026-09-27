@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Network, RefreshCw, Sparkles } from 'lucide-react'
 
@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingSpinner } from '@/components/common/LoadingSpinner'
 import { GraphInspector } from '@/components/graph/GraphInspector'
 import { KnowledgeGraphCanvas } from '@/components/graph/KnowledgeGraphCanvas'
+import { AppShell } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/hooks/use-graph'
 import { useNotebooks } from '@/lib/hooks/use-notebooks'
 import { useTranslation } from '@/lib/hooks/use-translation'
+import { cn } from '@/lib/utils'
 import type { GraphNode, KnowledgeGraphResponse } from '@/lib/types/graph'
 
 const ALL_NOTEBOOKS = 'all'
@@ -39,6 +41,26 @@ function GraphPageInner() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showProposals, setShowProposals] = useState(true)
+
+  // A scan is a background job that can run for minutes, and one mutation hook
+  // only tracks its latest run - so the pending flag is global. Remembering
+  // which notebook was scanned lets the button report "scanning" only where
+  // that is true: otherwise switching to another notebook kept showing a
+  // disabled, relabelled button and the action looked like it had vanished.
+  const [scanNotebookId, setScanNotebookId] = useState<string | null>(null)
+  const [scanStartedAt, setScanStartedAt] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  useEffect(() => {
+    if (scanStartedAt === null) {
+      setElapsedSeconds(0)
+      return
+    }
+    const timer = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - scanStartedAt) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [scanStartedAt])
 
   const { data: notebooks } = useNotebooks()
   const {
@@ -105,8 +127,27 @@ function GraphPageInner() {
     })
   }
 
+  const isScanningHere =
+    scanNotebookId === notebookIdParam && scanStartedAt !== null
+
+  const handleScan = () => {
+    if (!notebookIdParam) return
+    const target = notebookIdParam
+    setScanNotebookId(target)
+    setScanStartedAt(Date.now())
+    scan.mutate(
+      { notebookId: target },
+      {
+        onSettled: () => {
+          setScanNotebookId(null)
+          setScanStartedAt(null)
+        },
+      }
+    )
+  }
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Network className="h-4 w-4 text-teal-500" />
@@ -160,13 +201,16 @@ function GraphPageInner() {
           </Button>
           {/* Scanning needs a notebook to scope the frontier to. */}
           {notebookIdParam && (
-            <Button
-              size="sm"
-              onClick={() => scan.mutate({ notebookId: notebookIdParam })}
-              disabled={scan.isPending}
-            >
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              {scan.isPending ? t('graph.scanning') : t('graph.scanFrontier')}
+            <Button size="sm" onClick={handleScan} disabled={isScanningHere}>
+              <Sparkles
+                className={cn(
+                  'mr-1.5 h-3.5 w-3.5',
+                  isScanningHere && 'animate-pulse'
+                )}
+              />
+              {isScanningHere
+                ? `${t('graph.scanning')} ${elapsedSeconds}s`
+                : t('graph.scanFrontier')}
             </Button>
           )}
         </div>
@@ -232,14 +276,16 @@ function GraphPageInner() {
 
 export default function GraphPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center">
-          <LoadingSpinner />
-        </div>
-      }
-    >
-      <GraphPageInner />
-    </Suspense>
+    <AppShell>
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <LoadingSpinner />
+          </div>
+        }
+      >
+        <GraphPageInner />
+      </Suspense>
+    </AppShell>
   )
 }
