@@ -1,0 +1,37 @@
+-- Migration 26 rollback: drop the knowledge / memory foundation.
+--
+-- Drops the AI memory plane, the typed edges and the note fields added by 26.
+-- The `note` rows themselves are untouched: rows that only used the dropped
+-- fields keep their title/content, only the extra metadata is lost.
+
+REMOVE FUNCTION IF EXISTS fn::memory_search;
+
+REMOVE EVENT IF EXISTS exploration_point_delete ON TABLE exploration_point;
+REMOVE EVENT IF EXISTS memory_item_delete ON TABLE memory_item;
+REMOVE EVENT IF EXISTS note_delete ON TABLE note;
+
+REMOVE TABLE IF EXISTS explores;
+REMOVE TABLE IF EXISTS promoted_to;
+REMOVE TABLE IF EXISTS supersedes;
+REMOVE TABLE IF EXISTS contradicts;
+REMOVE TABLE IF EXISTS supports;
+REMOVE TABLE IF EXISTS derived_from;
+REMOVE TABLE IF EXISTS relates_to;
+REMOVE TABLE IF EXISTS includes;
+
+REMOVE INDEX IF EXISTS idx_memory_content ON TABLE memory_item;
+
+REMOVE TABLE IF EXISTS exploration_point;
+REMOVE TABLE IF EXISTS memory_item;
+REMOVE TABLE IF EXISTS memory_core;
+
+DELETE open_notebook:memory_core;
+
+REMOVE FIELD IF EXISTS valid_until ON TABLE note;
+REMOVE FIELD IF EXISTS valid_from ON TABLE note;
+REMOVE FIELD IF EXISTS generated_by ON TABLE note;
+REMOVE FIELD IF EXISTS proposal_status ON TABLE note;
+REMOVE FIELD IF EXISTS status ON TABLE note;
+REMOVE FIELD IF EXISTS note_kind ON TABLE note;
+REMOVE FIELD IF EXISTS keywords ON TABLE note;
+REMOVE FIELD IF EXISTS tags ON TABLE note;

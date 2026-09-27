@@ -1,142 +1,79 @@
--- Migration 25: knowledge / memory foundation (self-iterating notes, P0)
---
--- Introduces the two-plane model:
---   * Plane U (user knowledge tree) = the existing `note` table, extended with
---     the fields AI-generated knowledge and proposals need. The tree shape is
---     carried by the `includes` edge (note -> note, multiple parents allowed)
---     and the web shape by `relates_to`.
---   * Plane M (AI memory plane) = new tables `memory_item` (atomic memory
---     cards, A-MEM/Zettelkasten style), `exploration_point` (frontier
---     proposals anchored to knowledge leaves) and `memory_core`
---     (slow-changing profile, user editable).
---
--- Q&A stays out of both planes on purpose: it lives in the LangGraph
--- checkpoint and is deleted once consolidated into knowledge.
---
--- Typed edges connect the planes and record provenance:
---   derived_from  provenance of an AI artifact (source of truth)
---   supports / contradicts / supersedes  memory-to-memory evolution
---   promoted_to   a user accepted a memory into the knowledge tree
---   explores      an exploration point anchored on a knowledge note
+-- Migration 25: resolve text-search insight hits to their parent source (#1312).
+REMOVE FUNCTION IF EXISTS fn::text_search;
 
--- --------------------------------------------------------------- note fields
-DEFINE FIELD IF NOT EXISTS tags ON TABLE note TYPE option<array<string>>;
-DEFINE FIELD IF NOT EXISTS keywords ON TABLE note TYPE option<array<string>>;
-DEFINE FIELD IF NOT EXISTS note_kind ON TABLE note TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS status ON TABLE note TYPE option<string> DEFAULT 'active';
-DEFINE FIELD IF NOT EXISTS proposal_status ON TABLE note TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS generated_by ON TABLE note TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS valid_from ON TABLE note TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS valid_until ON TABLE note TYPE option<datetime>;
-
--- ------------------------------------------------------------ AI memory plane
-DEFINE TABLE IF NOT EXISTS memory_item SCHEMAFULL;
-
-DEFINE FIELD IF NOT EXISTS content ON TABLE memory_item TYPE string;
-DEFINE FIELD IF NOT EXISTS kind ON TABLE memory_item TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS keywords ON TABLE memory_item TYPE option<array<string>>;
-DEFINE FIELD IF NOT EXISTS tags ON TABLE memory_item TYPE option<array<string>>;
-DEFINE FIELD IF NOT EXISTS context ON TABLE memory_item TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS embedding ON TABLE memory_item TYPE option<array<float>>;
-DEFINE FIELD IF NOT EXISTS confidence ON TABLE memory_item TYPE option<float>;
-DEFINE FIELD IF NOT EXISTS importance ON TABLE memory_item TYPE option<float>;
-DEFINE FIELD IF NOT EXISTS status ON TABLE memory_item TYPE option<string> DEFAULT 'active';
-DEFINE FIELD IF NOT EXISTS origin ON TABLE memory_item TYPE option<string> DEFAULT 'derived';
-DEFINE FIELD IF NOT EXISTS notebook ON TABLE memory_item TYPE option<record<notebook>>;
-DEFINE FIELD IF NOT EXISTS access_count ON TABLE memory_item TYPE option<int> DEFAULT 0;
-DEFINE FIELD IF NOT EXISTS last_accessed ON TABLE memory_item TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS valid_from ON TABLE memory_item TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS valid_until ON TABLE memory_item TYPE option<datetime>;
-DEFINE FIELD IF NOT EXISTS created ON memory_item DEFAULT time::now() VALUE $before OR time::now();
-DEFINE FIELD IF NOT EXISTS updated ON memory_item DEFAULT time::now() VALUE time::now();
-
-DEFINE INDEX IF NOT EXISTS idx_memory_content ON TABLE memory_item COLUMNS content SEARCH ANALYZER my_analyzer BM25 HIGHLIGHTS;
-
-DEFINE TABLE IF NOT EXISTS exploration_point SCHEMAFULL;
-
-DEFINE FIELD IF NOT EXISTS question ON TABLE exploration_point TYPE string;
-DEFINE FIELD IF NOT EXISTS rationale ON TABLE exploration_point TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS kind ON TABLE exploration_point TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS status ON TABLE exploration_point TYPE option<string> DEFAULT 'proposed';
-DEFINE FIELD IF NOT EXISTS score ON TABLE exploration_point TYPE option<float>;
-DEFINE FIELD IF NOT EXISTS notebook ON TABLE exploration_point TYPE option<record<notebook>>;
-DEFINE FIELD IF NOT EXISTS origin ON TABLE exploration_point TYPE option<string>;
-DEFINE FIELD IF NOT EXISTS created ON exploration_point DEFAULT time::now() VALUE $before OR time::now();
-DEFINE FIELD IF NOT EXISTS updated ON exploration_point DEFAULT time::now() VALUE time::now();
-
--- SCHEMALESS on purpose: a singleton record (open_notebook:memory_core) read and
--- written through RecordModel, same pattern as chat_session / content_settings.
-DEFINE TABLE IF NOT EXISTS memory_core SCHEMALESS;
-
--- ------------------------------------------------------------- typed edges
-DEFINE TABLE IF NOT EXISTS includes TYPE RELATION IN note OUT note;
-DEFINE TABLE IF NOT EXISTS relates_to TYPE RELATION IN note OUT note;
--- SurrealDB v2 has no multi-table IN/OUT declaration: both `IN a, b` and
--- `OUT c, d` are parse errors (verified against a live v2 instance), so this
--- relation is declared unconstrained and its polymorphism is enforced by the
--- domain layer instead - only notes/memories are ever related to
--- sources/notes/memories through it. Declaring it as
--- `IN note OUT note` would be worse: it would reject source provenance.
-DEFINE TABLE IF NOT EXISTS derived_from TYPE RELATION;
-DEFINE TABLE IF NOT EXISTS supports TYPE RELATION IN memory_item OUT memory_item;
-DEFINE TABLE IF NOT EXISTS contradicts TYPE RELATION IN memory_item OUT memory_item;
-DEFINE TABLE IF NOT EXISTS supersedes TYPE RELATION IN memory_item OUT memory_item;
-DEFINE TABLE IF NOT EXISTS promoted_to TYPE RELATION IN memory_item OUT note;
-DEFINE TABLE IF NOT EXISTS explores TYPE RELATION IN exploration_point OUT note;
-
--- --------------------------------------------------------------- cascades
--- A deleted note must not leave dangling edges behind, and the AI artifacts
--- derived from it must not keep pretending to be current.
-DEFINE EVENT IF NOT EXISTS note_delete ON TABLE note WHEN ($after == NONE) THEN {
-    UPDATE memory_item SET status = 'stale', updated = time::now() WHERE id IN (SELECT VALUE in FROM derived_from WHERE out = $before.id);
-    UPDATE note SET status = 'stale', updated = time::now() WHERE id IN (SELECT VALUE in FROM derived_from WHERE out = $before.id);
-    DELETE derived_from WHERE in = $before.id OR out = $before.id;
-    DELETE includes WHERE in = $before.id OR out = $before.id;
-    DELETE relates_to WHERE in = $before.id OR out = $before.id;
-    DELETE explores WHERE out = $before.id;
-    DELETE promoted_to WHERE out = $before.id;
-};
-
-DEFINE EVENT IF NOT EXISTS memory_item_delete ON TABLE memory_item WHEN ($after == NONE) THEN {
-    DELETE derived_from WHERE in = $before.id;
-    DELETE supports WHERE in = $before.id OR out = $before.id;
-    DELETE contradicts WHERE in = $before.id OR out = $before.id;
-    DELETE supersedes WHERE in = $before.id OR out = $before.id;
-    DELETE promoted_to WHERE in = $before.id;
-};
-
-DEFINE EVENT IF NOT EXISTS exploration_point_delete ON TABLE exploration_point WHEN ($after == NONE) THEN {
-    DELETE explores WHERE in = $before.id;
-};
-
--- ---------------------------------------------------- memory vector retrieval
--- Deliberately a separate function instead of a new parameter on
--- fn::vector_search: that signature is already called with six positional
--- arguments from Python, and SurrealDB functions take no default arguments.
-REMOVE FUNCTION IF EXISTS fn::memory_search;
-
-DEFINE FUNCTION IF NOT EXISTS fn::memory_search($query: array<float>, $match_count: int, $min_similarity: float, $notebook_ids: option<array<record<notebook>>>) {
+DEFINE FUNCTION IF NOT EXISTS fn::text_search($query_text: string, $match_count: int, $sources: bool, $show_notes: bool, $notebook_ids: option<array<record<notebook>>>) {
 
     let $scoped = $notebook_ids != NONE AND array::len($notebook_ids) > 0;
+    let $scoped_sources = IF $scoped { (SELECT VALUE in FROM reference WHERE out IN $notebook_ids) } ELSE { [] };
+    let $scoped_notes = IF $scoped { (SELECT VALUE in FROM artifact WHERE out IN $notebook_ids) } ELSE { [] };
 
-    let $results =
-        SELECT
-            id,
-            kind as title,
-            content,
-            notebook as parent_id,
-            vector::similarity::cosine(embedding, $query) as similarity
-        FROM memory_item
-        WHERE embedding != none
-          AND array::len(embedding) = array::len($query)
-          AND vector::similarity::cosine(embedding, $query) >= $min_similarity
-          AND (!$scoped OR notebook IN $notebook_ids)
-        ORDER BY similarity DESC
-        LIMIT $match_count;
+    let $source_title_search =
+        IF $sources {(
+            SELECT id, title,
+            search::highlight('`', '`', 1) as content,
+            id as parent_id,
+            math::max(search::score(1)) AS relevance
+            FROM source
+            WHERE title @1@ $query_text
+              AND (!$scoped OR id IN $scoped_sources)
+            GROUP BY id)}
+        ELSE { [] };
 
-    RETURN (select id, parent_id, title, math::max(similarity) as similarity,
-    array::flatten(content) as matches
-    from $results where id is not None
-    group by id, parent_id, title ORDER BY similarity DESC LIMIT $match_count);
+    let $source_embedding_search =
+         IF $sources {(
+            SELECT source.id as id, source.title as title, search::highlight('`', '`', 1) as content, source.id as parent_id, math::max(search::score(1)) AS relevance
+            FROM source_embedding
+            WHERE content @1@ $query_text
+              AND (!$scoped OR source IN $scoped_sources)
+            GROUP BY id)}
+        ELSE { [] };
+
+    let $source_full_search =
+         IF $sources {(
+            SELECT id, title, search::highlight('`', '`', 1) as content, id as parent_id, math::max(search::score(1)) AS relevance
+            FROM source
+            WHERE full_text @1@ $query_text
+              AND (!$scoped OR id IN $scoped_sources)
+            GROUP BY id)}
+        ELSE { [] };
+
+    let $source_insight_search =
+         IF $sources {(
+             SELECT id, insight_type + " - " + (source.title OR '') as title, search::highlight('`', '`', 1) as content, source.id as parent_id,  math::max(search::score(1)) AS relevance
+            FROM source_insight
+            WHERE content @1@ $query_text
+              AND (!$scoped OR source IN $scoped_sources)
+            GROUP BY id)}
+        ELSE { [] };
+
+    let $note_title_search =
+         IF $show_notes {(
+             SELECT id, title, search::highlight('`', '`', 1) as content,  id as parent_id, math::max(search::score(1)) AS relevance
+            FROM note
+            WHERE title @1@ $query_text
+              AND (!$scoped OR id IN $scoped_notes)
+            GROUP BY id)}
+        ELSE { [] };
+
+     let $note_content_search =
+         IF $show_notes {(
+             SELECT id, title, search::highlight('`', '`', 1) as content,  id as parent_id, math::max(search::score(1)) AS relevance
+            FROM note
+            WHERE content @1@ $query_text
+              AND (!$scoped OR id IN $scoped_notes)
+            GROUP BY id)}
+        ELSE { [] };
+
+    let $source_chunk_results = array::union($source_embedding_search, $source_full_search);
+
+    let $source_asset_results = array::union($source_title_search, $source_insight_search);
+
+    let $source_results = array::union($source_chunk_results, $source_asset_results );
+    let $note_results = array::union($note_title_search, $note_content_search );
+    let $final_results = array::union($source_results, $note_results );
+
+        RETURN (select id, parent_id, title, math::max(relevance) as relevance
+        from $final_results where id is not None
+        group by id, parent_id, title ORDER BY relevance DESC LIMIT $match_count);
 
 };

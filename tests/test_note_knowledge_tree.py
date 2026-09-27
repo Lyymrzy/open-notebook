@@ -225,20 +225,33 @@ class TestNoteMemories:
             await Note(title="t", content="c").get_memories()
 
 
-class TestMigration25Registration:
+class TestMigration26Registration:
     """Migrations are hard-coded in AsyncMigrationManager, not discovered."""
 
     def test_migration_is_registered_in_both_directions(self):
         from open_notebook.database.async_migrate import AsyncMigrationManager
 
         manager = AsyncMigrationManager()
-        assert len(manager.up_migrations) >= 25
+        assert len(manager.up_migrations) >= 26
         assert len(manager.up_migrations) == len(manager.down_migrations)
+
+    def test_upstream_25_and_our_26_are_distinct_migrations(self):
+        """Two different migrations must never share a number.
+
+        Upstream claimed 25 for its text-search fix while this work was in
+        flight. Had we kept 25, the version counter would have marked upstream's
+        migration as applied and silently skipped it on every existing database.
+        """
+        from open_notebook.database.async_migrate import AsyncMigrationManager
+
+        manager = AsyncMigrationManager()
+        assert "fn::text_search" in manager.up_migrations[24].sql
+        assert "memory_item" in manager.up_migrations[25].sql
 
     def test_up_migration_defines_the_memory_plane_and_edges(self):
         from open_notebook.database.async_migrate import AsyncMigrationManager
 
-        sql = AsyncMigrationManager().up_migrations[24].sql
+        sql = AsyncMigrationManager().up_migrations[25].sql
         assert "memory_item" in sql
         assert "exploration_point" in sql
         assert "memory_core" in sql
@@ -253,7 +266,7 @@ class TestMigration25Registration:
     def test_down_migration_drops_what_up_created(self):
         from open_notebook.database.async_migrate import AsyncMigrationManager
 
-        sql = AsyncMigrationManager().down_migrations[24].sql
+        sql = AsyncMigrationManager().down_migrations[25].sql
         assert "REMOVE TABLE IF EXISTS memory_item" in sql
         assert "REMOVE TABLE IF EXISTS exploration_point" in sql
         assert "REMOVE FUNCTION IF EXISTS fn::memory_search" in sql
