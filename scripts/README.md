@@ -1,5 +1,38 @@
 # Scripts Documentation
 
+## check_migrations.py
+
+Applies the whole migration chain to a throwaway namespace and rolls it back, as
+a pre-flight before a migration reaches a real database.
+
+### Why It Exists
+
+Asserting on migration *text* cannot catch a SurrealQL syntax error - only
+executing the migration can. Migration 25 shipped a multi-table relation
+declaration (`TYPE RELATION IN note, memory_item OUT source, ...`) that SurrealDB
+v2 rejects with a parse error. Every unit test was green; the failure only
+appeared when the image ran against a real database, where it aborted the
+migration and (because the API refuses to start afterwards) took the deployment
+down.
+
+### Usage
+
+```bash
+# Apply every migration to an empty schema, then roll back the last one
+uv run python scripts/check_migrations.py
+
+# Also exercise the whole down chain
+uv run python scripts/check_migrations.py --all-down
+
+# Keep the probe schema for inspection
+uv run python scripts/check_migrations.py --keep
+```
+
+It reads the same `SURREAL_*` variables the app does (loading `.env` from the
+repo root when present) and refuses to run against the namespace that
+environment is configured for, so it can never modify real data. Exit code is
+non-zero when the chain fails to apply or fails to roll back.
+
 ## export_docs.py
 
 Consolidates markdown documentation files for use with ChatGPT or other platforms with file upload limits.
