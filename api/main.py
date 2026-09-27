@@ -32,6 +32,8 @@ from api.routers import (
     credentials,
     embedding,
     embedding_rebuild,
+    explorations,
+    graph,
     insights,
     languages,
     models,
@@ -392,6 +394,8 @@ app.include_router(search.router, prefix="/api", tags=["search"])
 app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(transformations.router, prefix="/api", tags=["transformations"])
 app.include_router(notes.router, prefix="/api", tags=["notes"])
+app.include_router(graph.router, prefix="/api", tags=["graph"])
+app.include_router(explorations.router, prefix="/api", tags=["explorations"])
 app.include_router(embedding.router, prefix="/api", tags=["embedding"])
 app.include_router(
     embedding_rebuild.router, prefix="/api/embeddings", tags=["embeddings"]

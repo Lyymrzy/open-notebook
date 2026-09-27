@@ -36,6 +36,7 @@ import {
   ChevronLeft,
   Menu,
   FileText,
+  Network,
   Plus,
   Wrench,
   Command,
@@ -52,6 +53,7 @@ const getNavigation = (t: TFunction) => [
     title: t('navigation.process'),
     items: [
       { name: t('navigation.notebooks'), href: '/notebooks', icon: Book, iconClass: 'text-teal' },
+      { name: t('graph.title'), href: '/graph', icon: Network, iconClass: 'text-teal' },
       { name: t('navigation.askAndSearch'), href: '/search', icon: Search, iconClass: undefined },
     ],
   },

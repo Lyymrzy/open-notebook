@@ -343,6 +343,96 @@ class IterateJobResponse(BaseModel):
     )
 
 
+# Knowledge graph API models
+class GraphNode(BaseModel):
+    """A note or an exploration point, shaped for a graph renderer."""
+
+    id: str
+    kind: str = Field(..., description="note or exploration")
+    label: str
+    note_type: Optional[str] = Field(None, description="human or ai (notes only)")
+    note_kind: Optional[str] = Field(
+        None, description="How the note came to be (synthesis, refinement, ...)"
+    )
+    status: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    is_leaf: bool = Field(
+        False, description="Nothing grows out of it yet - where proposals attach"
+    )
+    child_count: int = 0
+    exploration_kind: Optional[str] = Field(
+        None, description="gap, depth, crosslink or contradiction (explorations only)"
+    )
+    score: Optional[float] = None
+    rationale: Optional[str] = None
+    anchor_id: Optional[str] = Field(
+        None, description="Note an exploration point is attached to"
+    )
+    created: Optional[str] = None
+    updated: Optional[str] = None
+
+
+class GraphEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    kind: str = Field(
+        ..., description="includes (tree), relates_to (web) or explores (anchor)"
+    )
+    label: Optional[str] = None
+
+
+class KnowledgeGraphResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+    notebook_id: Optional[str] = None
+    max_nodes: int
+    truncated: bool = Field(
+        False, description="True when the node cap cut the graph short"
+    )
+    external_link_count: int = Field(
+        0, description="Links whose other end is outside the requested scope"
+    )
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+# Exploration point API models
+class ExplorationPointResponse(BaseModel):
+    id: str
+    question: str
+    rationale: Optional[str] = None
+    kind: Optional[str] = None
+    status: Optional[str] = None
+    score: Optional[float] = None
+    notebook_id: Optional[str] = None
+    anchor_id: Optional[str] = Field(
+        None, description="Note this proposal grows out of"
+    )
+    created: Optional[str] = None
+    updated: Optional[str] = None
+
+
+class FrontierScanRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    notebook_id: str = Field(..., description="Notebook whose frontier to scan")
+    max_leaves: int = Field(
+        10, ge=1, le=50, description="How many leaf notes to consider"
+    )
+    questions_per_leaf: int = Field(1, ge=1, le=3)
+    model_id: Optional[str] = Field(None, description="Model ID to use")
+
+
+class FrontierScanJobResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    job_id: str = Field(..., description="Poll GET /api/commands/jobs/{job_id}")
+    status: str
+    notebook_id: str
+
+
 # Embedding API models
 class EmbedRequest(BaseModel):
     item_id: str = Field(..., description="ID of the item to embed")

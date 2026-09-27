@@ -15,6 +15,7 @@ from .embedding_commands import (
     embed_source_command,
     rebuild_embeddings_command,
 )
+from .explore_commands import scan_frontier_command
 from .iterate_commands import (
     refine_note_command,
     synthesize_notes_command,
@@ -31,6 +32,8 @@ __all__ = [
     # Knowledge iteration commands
     "synthesize_notes_command",
     "refine_note_command",
+    # Knowledge exploration commands
+    "scan_frontier_command",
     # Other commands
     "process_source_command",
 ]

@@ -31,4 +31,6 @@ export const QUERY_KEYS = {
   notebookChatSessions: (notebookId: string) => ['notebook-chat', notebookId, 'sessions'] as const,
   notebookChatSession: (sessionId: string) => ['notebook-chat', 'sessions', sessionId] as const,
   languages: ['languages'] as const,
+  graph: (notebookId?: string) => ['graph', notebookId ?? 'all'] as const,
+  explorations: (notebookId?: string) => ['explorations', notebookId ?? 'all'] as const,
 }
