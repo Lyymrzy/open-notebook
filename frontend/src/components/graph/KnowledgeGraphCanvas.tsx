@@ -22,10 +22,29 @@ const nodeTypes = { knowledge: KnowledgeNode }
 
 // Colour language shared with the legend: grey = tree, blue = cross-reference,
 // violet = a proposal that is not knowledge yet.
+//
+// Theme tokens hold complete colour values (`--muted-foreground: #565a61`), so
+// they must be referenced as `var(--x)` directly. Passing one through the hsl()
+// wrapper yields an invalid declaration that the browser drops, which painted
+// the tree edges with no stroke at all — see src/lib/theme-tokens.test.ts.
+const EDGE_COLOR: Record<GraphEdge['kind'], string> = {
+  includes: 'var(--muted-foreground)',
+  relates_to: '#60a5fa',
+  explores: '#a78bfa',
+}
+
 const EDGE_STYLE: Record<GraphEdge['kind'], React.CSSProperties> = {
-  includes: { stroke: 'hsl(var(--border))', strokeWidth: 1.5 },
-  relates_to: { stroke: '#60a5fa', strokeWidth: 1.2, strokeDasharray: '5 4' },
-  explores: { stroke: '#a78bfa', strokeWidth: 1.2, strokeDasharray: '2 4' },
+  includes: { stroke: EDGE_COLOR.includes, strokeWidth: 2 },
+  relates_to: {
+    stroke: EDGE_COLOR.relates_to,
+    strokeWidth: 1.5,
+    strokeDasharray: '5 4',
+  },
+  explores: {
+    stroke: EDGE_COLOR.explores,
+    strokeWidth: 1.5,
+    strokeDasharray: '2 4',
+  },
 }
 
 const ARROWED: Record<GraphEdge['kind'], boolean> = {
@@ -63,7 +82,12 @@ export function KnowledgeGraphCanvas({
       style: EDGE_STYLE[edge.kind],
       label: edge.label ?? undefined,
       markerEnd: ARROWED[edge.kind]
-        ? { type: MarkerType.ArrowClosed, width: 12, height: 12 }
+        ? {
+            type: MarkerType.ArrowClosed,
+            width: 12,
+            height: 12,
+            color: EDGE_COLOR[edge.kind],
+          }
         : undefined,
     }))
 
@@ -81,6 +105,9 @@ export function KnowledgeGraphCanvas({
       minZoom={0.1}
       nodesDraggable={false}
       nodesConnectable={false}
+      // React Flow renders into a 100%-sized box, so a parent without a definite
+      // height collapses it to nothing; being explicit keeps the canvas filled.
+      style={{ width: '100%', height: '100%' }}
       proOptions={{ hideAttribution: false }}
     >
       <Background gap={20} />
