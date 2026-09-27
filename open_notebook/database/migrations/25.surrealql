@@ -71,7 +71,13 @@ DEFINE TABLE IF NOT EXISTS memory_core SCHEMALESS;
 -- ------------------------------------------------------------- typed edges
 DEFINE TABLE IF NOT EXISTS includes TYPE RELATION IN note OUT note;
 DEFINE TABLE IF NOT EXISTS relates_to TYPE RELATION IN note OUT note;
-DEFINE TABLE IF NOT EXISTS derived_from TYPE RELATION IN note, memory_item OUT source, note, memory_item;
+-- SurrealDB v2 has no multi-table IN/OUT declaration: both `IN a, b` and
+-- `OUT c, d` are parse errors (verified against a live v2 instance), so this
+-- relation is declared unconstrained and its polymorphism is enforced by the
+-- domain layer instead - only notes/memories are ever related to
+-- sources/notes/memories through it. Declaring it as
+-- `IN note OUT note` would be worse: it would reject source provenance.
+DEFINE TABLE IF NOT EXISTS derived_from TYPE RELATION;
 DEFINE TABLE IF NOT EXISTS supports TYPE RELATION IN memory_item OUT memory_item;
 DEFINE TABLE IF NOT EXISTS contradicts TYPE RELATION IN memory_item OUT memory_item;
 DEFINE TABLE IF NOT EXISTS supersedes TYPE RELATION IN memory_item OUT memory_item;

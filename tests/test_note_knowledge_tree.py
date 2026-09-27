@@ -243,7 +243,11 @@ class TestMigration25Registration:
         assert "exploration_point" in sql
         assert "memory_core" in sql
         assert "TYPE RELATION IN note OUT note" in sql
-        assert "IN note, memory_item OUT source, note, memory_item" in sql
+        # SurrealDB v2 rejects multi-table IN/OUT lists, so provenance is an
+        # unconstrained relation. Pinned here because the failure mode is a
+        # migration that aborts on a live database.
+        assert "DEFINE TABLE IF NOT EXISTS derived_from TYPE RELATION;" in sql
+        assert "OUT source, note, memory_item" not in sql
         assert "fn::memory_search" in sql
 
     def test_down_migration_drops_what_up_created(self):
